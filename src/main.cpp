@@ -235,5 +235,9 @@ void loop() {
         pos = newPos;
     }
     Serial.print(current_selection);
+
+    /*Top Speed and acceleration code below this*/
+
+
 }
 
