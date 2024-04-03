@@ -94,7 +94,7 @@ float accelerationMode3()
 {
     return 0.3 * Speed;
 }
-float (accelerationModes[3])() = {accelerationMode1, accelerationMode2, accelerationMode3};
+float (*accelerationModes[3])() = {accelerationMode1, accelerationMode2, accelerationMode3};
 
 ezButton button(Menu_switch_pin);
 RotaryEncoder encoder(encoderPin1, encoderPin2);
@@ -331,7 +331,7 @@ void loop()
         }
         else if (prevmenu == 4 && current_selection != 4)
         {
-            aceleration_mode = accelerationModes[current_selection];
+            aceleration_mode = static_cast<int>(accelerationModes[current_selection]() + 0.5f);
             Serial.print(aceleration_mode);
         }
         menu = 1;
