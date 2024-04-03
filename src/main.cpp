@@ -17,12 +17,12 @@ const int Ligth_switch_pin = A4;
 const int Menu_switch_pin = 6; // Button
 const int encoderPin1 = A2;    // Rotary encoder
 const int encoderPin2 = A3;    // Rotary encoder
-const int hallPin_engine = 7;         // Hall effect sensor pin for engine
-const int hallPin_wheel = 8;          // Hall effect sensor pin for wheel
-const int gas_pedal_pin = A5;        // Gas pedal pin
+const int hallPin_engine = 7;  // Hall effect sensor pin for engine
+const int hallPin_wheel = 8;   // Hall effect sensor pin for wheel
+const int gas_pedal_pin = A5;  // Gas pedal pin
 
-//Global variables
-unsigned long previousMillis = 0; 
+// Global variables
+unsigned long previousMillis = 0;
 unsigned int interval = 15; // interval at which to move servo (milliseconds)
 
 // RPM sensor stuff engine and at wheel
@@ -34,7 +34,7 @@ volatile byte revolutions_wheel;
 unsigned long timeold_wheel;
 int rpm_wheel = 0;
 
-//global functions
+// global functions
 void rpm_engine_function()
 {
     revolutions_engine++;
@@ -45,21 +45,23 @@ void rpm_wheel_function()
     revolutions_wheel++;
 }
 
-void moveServo(Servo &servo, int targetPosition) 
+void moveServo(Servo &servo, int targetPosition)
 {
     unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
+    if (currentMillis - previousMillis >= interval)
+    {
         previousMillis = currentMillis;
         int currentPosition = servo.read();
-        if (currentPosition < targetPosition) {
+        if (currentPosition < targetPosition)
+        {
             servo.write(currentPosition + 1);
-        } else if (currentPosition > targetPosition) {
+        }
+        else if (currentPosition > targetPosition)
+        {
             servo.write(currentPosition - 1);
         }
     }
 }
-
-
 
 int menu = 1;
 int prevMenu = -1;
@@ -74,22 +76,25 @@ float throttle = 0;
 int Kp = .1; // Proportional control constant for throttle
 int prevmenu = 0;
 
-//Change these for the three different speed modes
-int speedmodes[3] = {25, 35, 100}; //array for the different speed modes
+// Change these for the three different speed modes
+int speedmodes[3] = {25, 35, 100}; // array for the different speed modes
 
-//Acceleration equations
-float accelerationMode1() {
+// Acceleration equations
+float accelerationMode1()
+{
     return 0.1 * Speed;
 }
 
-float accelerationMode2() {
+float accelerationMode2()
+{
     return 0.2 * Speed;
 }
 
-float accelerationMode3() {
+float accelerationMode3()
+{
     return 0.3 * Speed;
 }
-
+float (accelerationModes[3])() = {accelerationMode1, accelerationMode2, accelerationMode3};
 
 ezButton button(Menu_switch_pin);
 RotaryEncoder encoder(encoderPin1, encoderPin2);
@@ -142,7 +147,6 @@ void setup()
     revolutions_engine = 0;
     rpm_engine = 0;
     timeold_engine = 0;
-
 
     attachInterrupt(digitalPinToInterrupt(hallPin_wheel), rpm_wheel_function, RISING); // Interrupt on hallPin, so that's where the hall sensor needs to be
     revolutions_wheel = 0;
@@ -262,7 +266,7 @@ void loop()
         lcd.print('3');
         lcd.setCursor(14, 0);
         lcd.write(byte(1));
-        prevmenu = menu; //sets the previous menu to the current menu so the slecection menu knows which setting to change as the selection code is used for both menus
+        prevmenu = menu; // sets the previous menu to the current menu so the slecection menu knows which setting to change as the selection code is used for both menus
 
         break;
     }
@@ -320,7 +324,6 @@ void loop()
     }
     if (menu != 2 && menu != 1 && buttonpressed == HIGH) // If the menu is not the home screen or the settings menu and the button is pressed
     {
-        
         if (prevmenu == 3 && current_selection != 4) // If the previous menu was the speed settings menu
         {
             speed_mode = speedmodes[current_selection];
@@ -328,9 +331,9 @@ void loop()
         }
         else if (prevmenu == 4 && current_selection != 4)
         {
-            aceleration_mode = current_selection;
+            aceleration_mode = accelerationModes[current_selection];
+            Serial.print(aceleration_mode);
         }
-        
         menu = 1;
         lcd.clear();
         current_selection = 1;
@@ -367,44 +370,46 @@ void loop()
         revolutions_engine = 0;
         // Serial.println(rpm_engine,DEC);
     }
-    
+
     // Update acceleration based on Speed and acceleration mode
-    if (aceleration_mode == 1) {
+    if (aceleration_mode == 1)
+    {
         float result = accelerationMode1();
         interval = result;
-    } else if (aceleration_mode == 2) {
+    }
+    else if (aceleration_mode == 2)
+    {
         float result = accelerationMode2();
         interval = result;
-    } else if (aceleration_mode == 3) {
+    }
+    else if (aceleration_mode == 3)
+    {
         float result = accelerationMode3();
         interval = result;
     }
 
+    float speed_error = (speed_mode - Speed) / speed_mode; // Error in speed 0-1
+    float throttlecontrol = Kp * speed_error;              // Proportional control for throttle
 
-float speed_error = (speed_mode - Speed)/speed_mode; // Error in speed 0-1
-float throttlecontrol = Kp * speed_error; // Proportional control for throttle
+    // throttle servo
+    int max_throttle = 180; // sets max throttle
+    int min_throttle = 0;   // sets min throttle
 
-// throttle servo
-int max_throttle = 180; // sets max throttle
-int min_throttle = 0;   // sets min throttle
+    throttle = analogRead(gas_pedal_pin);
+    throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
 
-throttle = analogRead(gas_pedal_pin);
-throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
-
-if (Speed <= speed_mode-10) // if the speed is 10mph use what ever the throttle is
-{
-    moveServo(throttle_servo, throttle);
-}
-else if (Speed > speed_mode - 10 && Speed <= speed_mode) //if the speed is within 10mph of max speed then use proportional control
-{
-    int controlled_throttle = throttle - throttlecontrol * (max_throttle - min_throttle);
-    controlled_throttle = max(min_throttle, min(controlled_throttle, max_throttle)); // Ensure the throttle is within the min and max range
-    moveServo(throttle_servo, controlled_throttle);
-}
-else if (Speed > speed_mode)
-{
-    moveServo(throttle_servo, min_throttle); // Set to min throttle when speed is greater than speed_mode
-}
-    
-
+    if (Speed <= speed_mode - 10) // if the speed is 10mph use what ever the throttle is
+    {
+        moveServo(throttle_servo, throttle);
+    }
+    else if (Speed > speed_mode - 10 && Speed <= speed_mode) // if the speed is within 10mph of max speed then use proportional control
+    {
+        int controlled_throttle = throttle - throttlecontrol * (max_throttle - min_throttle);
+        controlled_throttle = max(min_throttle, min(controlled_throttle, max_throttle)); // Ensure the throttle is within the min and max range
+        moveServo(throttle_servo, controlled_throttle);
+    }
+    else if (Speed > speed_mode)
+    {
+        moveServo(throttle_servo, min_throttle); // Set to min throttle when speed is greater than speed_mode
+    }
 }
