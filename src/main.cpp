@@ -21,6 +21,46 @@ const int hallPin_engine = 7;         // Hall effect sensor pin for engine
 const int hallPin_wheel = 8;          // Hall effect sensor pin for wheel
 const int gas_pedal_pin = A5;        // Gas pedal pin
 
+//Global variables
+unsigned long previousMillis = 0; 
+unsigned int interval = 15; // interval at which to move servo (milliseconds)
+
+// RPM sensor stuff engine and at wheel
+volatile byte revolutions_engine;
+unsigned long timeold_engine;
+int rpm_engine = 0;
+
+volatile byte revolutions_wheel;
+unsigned long timeold_wheel;
+int rpm_wheel = 0;
+
+//global functions
+void rpm_engine_function()
+{
+    revolutions_engine++;
+}
+
+void rpm_wheel_function()
+{
+    revolutions_wheel++;
+}
+
+void moveServo(Servo &servo, int targetPosition) 
+{
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+        int currentPosition = servo.read();
+        if (currentPosition < targetPosition) {
+            servo.write(currentPosition + 1);
+        } else if (currentPosition > targetPosition) {
+            servo.write(currentPosition - 1);
+        }
+    }
+}
+
+
+
 int menu = 1;
 int prevMenu = -1;
 int Fuel_level = 0;
@@ -32,21 +72,27 @@ int aceleration_mode = 0;
 int current_selection = 0;
 float throttle = 0;
 int Kp = .1; // Proportional control constant for throttle
+int prevmenu = 0;
+
+//Change these for the three different speed modes
+int speedmodes[3] = {25, 35, 100}; //array for the different speed modes
+
+//Acceleration equations
+float accelerationMode1() {
+    return 0.1 * Speed;
+}
+
+float accelerationMode2() {
+    return 0.2 * Speed;
+}
+
+float accelerationMode3() {
+    return 0.3 * Speed;
+}
+
 
 ezButton button(Menu_switch_pin);
 RotaryEncoder encoder(encoderPin1, encoderPin2);
-
-// RPM sensor stuff engine and at wheel
-volatile byte revolutions_engine;
-unsigned long timeold_engine;
-int rpm_engine = 0;
-
-volatile byte revolutions_wheel;
-unsigned long timeold_wheel;
-int rpm_wheel = 0;
-
-void rpm_engine_function();
-void rpm_wheel_function();  
 
 // custom characters
 byte up_arrow[8] = {
@@ -154,14 +200,13 @@ void loop()
     case 1: // Home screen screen
         current_selection = 0;
         lcd.setCursor(0, 0);
-        lcd.print(String(Speed) + " Mph");
+        lcd.print(String(int(floor(Speed))) + " Mph");
         lcd.setCursor(0, 1);
         lcd.print(String(Temp) + " C");
-        lcd.setCursor(7, 0);
+        lcd.setCursor(8, 0);
         lcd.print(String(rpm_engine) + " RPM");
-        lcd.setCursor(7, 1);
+        lcd.setCursor(8, 1);
         lcd.print("Mode: " + String(speed_mode));
-
         if (buttonpressed == HIGH)
         { // If the button is pressed and the menu is the home screen then change to the settings menu
             menu = 2;
@@ -187,7 +232,7 @@ void loop()
             current_selection = 1;
         }
         break;
-    case 3: // Mode switching menu
+    case 3: // Speed Mode switching menu
         lcd.setCursor(0, 0);
         lcd.print("Mode");
         lcd.setCursor(0, 1);
@@ -200,6 +245,8 @@ void loop()
         lcd.print('3');
         lcd.setCursor(14, 0);
         lcd.write(byte(1));
+        prevmenu = menu;
+
         break;
 
     case 4: // Aceleration settings menu
@@ -215,6 +262,8 @@ void loop()
         lcd.print('3');
         lcd.setCursor(14, 0);
         lcd.write(byte(1));
+        prevmenu = menu; //sets the previous menu to the current menu so the slecection menu knows which setting to change as the selection code is used for both menus
+
         break;
     }
 
@@ -269,12 +318,24 @@ void loop()
             break;
         }
     }
-    if (menu != 2 && menu != 1 && current_selection == 4 && buttonpressed == HIGH)
+    if (menu != 2 && menu != 1 && buttonpressed == HIGH) // If the menu is not the home screen or the settings menu and the button is pressed
     {
-        menu = 2;
+        
+        if (prevmenu == 3 && current_selection != 4) // If the previous menu was the speed settings menu
+        {
+            speed_mode = speedmodes[current_selection];
+            Serial.print(speed_mode);
+        }
+        else if (prevmenu == 4 && current_selection != 4)
+        {
+            aceleration_mode = current_selection;
+        }
+        
+        menu = 1;
         lcd.clear();
         current_selection = 1;
     }
+
     // serial print the encoder position
     if (pos != newPos)
     {
@@ -284,12 +345,11 @@ void loop()
     Serial.print(current_selection);
 
     /*Top Speed and acceleration code below this*/
-
     // rpm sensor
     if (revolutions_wheel >= 20)
     { // Update RPM every 20 counts, increase this for better RPM resolution, decrease for faster update
         // Calculate RPM for wheel sensor
-        rpm_wheel = 60 * 1000 / (millis() - timeold_wheel) * revolutions_wheel;
+        rpm_wheel = 60L * 1000L / (millis() - timeold_wheel) * revolutions_wheel;
         timeold_wheel = millis();
         revolutions_wheel = 0;
         // Calculate speed from RPM to MPH
@@ -302,48 +362,49 @@ void loop()
     if (revolutions_engine >= 20)
     { // Update RPM every 20 counts, increase this for better RPM resolution, decrease for faster update
         // Calculate RPM for engine sensor
-        rpm_engine = 60 * 1000 / (millis() - timeold_engine) * revolutions_engine;
+        rpm_engine = 60L * 1000L / (millis() - timeold_engine) * revolutions_engine;
         timeold_engine = millis();
         revolutions_engine = 0;
         // Serial.println(rpm_engine,DEC);
     }
     
-    float speed_error = (speed_mode - Speed)/speed_mode; // Error in speed 0-1
-    float throttlecontrol = kp * speed_error; // Proportional control for throttle - wrong equation 
-
-    // throttle servo
-    int max_throttle = 180; // sets max throttle
-    int min_throttle = 0;   // sets min throttle
-
-    throttle = analogRead(gas_pedal_pin);
-    throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
-
-    if (Speed <= speed_mode-10) // if the speed is 10mph use what ever the throttle is
-    {
-        throttle_servo.write(throttle);
+    // Update acceleration based on Speed and acceleration mode
+    if (aceleration_mode == 1) {
+        float result = accelerationMode1();
+        interval = result;
+    } else if (aceleration_mode == 2) {
+        float result = accelerationMode2();
+        interval = result;
+    } else if (aceleration_mode == 3) {
+        float result = accelerationMode3();
+        interval = result;
     }
-    else if (Speed > speed_mode - 10 && Speed <+ speed_mode) //if the speed is within 10mph of max speed then use porpotional control
-    {
-        throttle_servo.write((throttle - throttlecontrol*max_throttle)); //not the right equation 
-    }else if (Speed > speed_mode)
-    {
-        throttle_servo.write(0);
-    }
+
+
+float speed_error = (speed_mode - Speed)/speed_mode; // Error in speed 0-1
+float throttlecontrol = Kp * speed_error; // Proportional control for throttle
+
+// throttle servo
+int max_throttle = 180; // sets max throttle
+int min_throttle = 0;   // sets min throttle
+
+throttle = analogRead(gas_pedal_pin);
+throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
+
+if (Speed <= speed_mode-10) // if the speed is 10mph use what ever the throttle is
+{
+    moveServo(throttle_servo, throttle);
+}
+else if (Speed > speed_mode - 10 && Speed <= speed_mode) //if the speed is within 10mph of max speed then use proportional control
+{
+    int controlled_throttle = throttle - throttlecontrol * (max_throttle - min_throttle);
+    controlled_throttle = max(min_throttle, min(controlled_throttle, max_throttle)); // Ensure the throttle is within the min and max range
+    moveServo(throttle_servo, controlled_throttle);
+}
+else if (Speed > speed_mode)
+{
+    moveServo(throttle_servo, min_throttle); // Set to min throttle when speed is greater than speed_mode
+}
     
 
-
-
-
-
-}
-
-
-void rpm_engine_function()
-{
-    revolutions_engine++;
-}
-
-void rpm_wheel_function()
-{
-    revolutions_wheel++;
 }
