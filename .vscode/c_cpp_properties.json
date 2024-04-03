@@ -10,6 +10,7 @@
             "includePath": [
                 "d:/Gokart/Code_gokart/Code V2/include",
                 "d:/Gokart/Code_gokart/Code V2/src",
+                "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/Servo/src",
                 "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/RotaryEncoder/src",
                 "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/ezButton/src",
                 "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/LiquidCrystal/src",
@@ -27,6 +28,7 @@
                 "path": [
                     "d:/Gokart/Code_gokart/Code V2/include",
                     "d:/Gokart/Code_gokart/Code V2/src",
+                    "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/Servo/src",
                     "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/RotaryEncoder/src",
                     "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/ezButton/src",
                     "d:/Gokart/Code_gokart/Code V2/.pio/libdeps/megaatmega2560/LiquidCrystal/src",
@@ -41,7 +43,7 @@
                 ]
             },
             "defines": [
-                "PLATFORMIO=60113",
+                "PLATFORMIO=60114",
                 "ARDUINO_AVR_MEGA2560",
                 "F_CPU=16000000L",
                 "ARDUINO_ARCH_AVR",

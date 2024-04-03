@@ -2,7 +2,10 @@
 #include <Arduino.h>
 #include <ezButton.h>
 #include <RotaryEncoder.h>
+#include <pins_arduino.h>
+#include <servo.h>
 
+Servo throttle_servo;
 
 const int RS = 11, EN = 12, D4 = 2, D5 = 3, D6 = 4, D7 = 5;
 LiquidCrystal lcd(RS, EN, D4, D5, D6, D7);
@@ -11,63 +14,73 @@ const int Speed_pin = A1;
 const int RPM_pin = A2;
 const int Temp_pin = A3;
 const int Ligth_switch_pin = A4;
-const int Menu_switch_pin = 6;  //Button
-const int encoderPin1 = A2;  //Rotary encoder
-const int encoderPin2 = A3; //Rotary encoder
+const int Menu_switch_pin = 6; // Button
+const int encoderPin1 = A2;    // Rotary encoder
+const int encoderPin2 = A3;    // Rotary encoder
+const int hallPin_engine = 7;         // Hall effect sensor pin for engine
+const int hallPin_wheel = 8;          // Hall effect sensor pin for wheel
+const int gas_pedal_pin = A5;        // Gas pedal pin
 
 int menu = 1;
 int prevMenu = -1;
 int Fuel_level = 0;
-int Speed = 0;
-int RPM = 0;
+float Speed = 0;
 int Temp = 0;
 int Ligth_switch_mode = 0;
 int speed_mode = 0;
 int aceleration_mode = 0;
 int current_selection = 0;
+float throttle = 0;
+int Kp = .1; // Proportional control constant for throttle
 
 ezButton button(Menu_switch_pin);
 RotaryEncoder encoder(encoderPin1, encoderPin2);
 
-float speed_mode_1 = 0.33; // 33% of the max speed
-float speed_mode_2 = 0.66; // 66% of the max speed
-float speed_mode_3 = 1.00; // 100% of the max speed
+// RPM sensor stuff engine and at wheel
+volatile byte revolutions_engine;
+unsigned long timeold_engine;
+int rpm_engine = 0;
 
-//custom characters
+volatile byte revolutions_wheel;
+unsigned long timeold_wheel;
+int rpm_wheel = 0;
+
+void rpm_engine_function();
+void rpm_wheel_function();  
+
+// custom characters
 byte up_arrow[8] = {
-        0b00100,
-        0b01110,
-        0b10101,
-        0b00100,
-        0b00100,
-        0b00100,
-        0b00000,
-        0b00000
-};
+    0b00100,
+    0b01110,
+    0b10101,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b00000,
+    0b00000};
 
 byte return_arrow[8] = {
-        0b00100,
-        0b01000,
-        0b11111,
-        0b01001,
-        0b00101,
-        0b00001,
-        0b00111,
-        0b00000
-};
+    0b00100,
+    0b01000,
+    0b11111,
+    0b01001,
+    0b00101,
+    0b00001,
+    0b00111,
+    0b00000};
 
 byte sideways_arrow[8] = {
-        0b00000,
-        0b00100,
-        0b01000,
-        0b11111,
-        0b01000,
-        0b00100,
-        0b00000,
-        0b00000
-};
+    0b00000,
+    0b00100,
+    0b01000,
+    0b11111,
+    0b01000,
+    0b00100,
+    0b00000,
+    0b00000};
 
-void setup() {
+void setup()
+{
     lcd.begin(16, 2);    // set up number of columns and rows
     lcd.setCursor(0, 0); // move cursor to   (0, 0)
     pinMode(Menu_switch_pin, INPUT);
@@ -77,124 +90,155 @@ void setup() {
     lcd.createChar(2, sideways_arrow);
     Serial.begin(9600);
     lcd.clear();
+
+    // rpm sensor setup
+    attachInterrupt(digitalPinToInterrupt(hallPin_engine), rpm_engine_function, RISING); // Interrupt on hallPin, so that's where the hall sensor needs to be
+    revolutions_engine = 0;
+    rpm_engine = 0;
+    timeold_engine = 0;
+
+
+    attachInterrupt(digitalPinToInterrupt(hallPin_wheel), rpm_wheel_function, RISING); // Interrupt on hallPin, so that's where the hall sensor needs to be
+    revolutions_wheel = 0;
+    rpm_wheel = 0;
+    timeold_wheel = 0;
+
+    // servo setup
+    throttle_servo.attach(9);
 }
 
-void loop() {
+void loop()
+{
 
-// Button Stuff
+    // Button Stuff
     button.loop();
     int buttonpressed = button.isPressed();
     button.setDebounceTime(50); // set debounce time to 50 milliseconds
-// encoder set up stuff
+                                // encoder set up stuff
     static int pos = 0;
     encoder.tick();
     int newPos = encoder.getPosition();
-// serial print the button state
-    if (buttonpressed == HIGH) {
+    // serial print the button state
+    if (buttonpressed == HIGH)
+    {
         Serial.print("Button pressed\n");
     }
-// changes the current selection based on the encoder position
+    // changes the current selection based on the encoder position
 
-    if (newPos > pos) {
+    if (newPos > pos)
+    {
         Serial.print("up");
-        if (menu == 2) {
-            if (current_selection < 2) {
+        if (menu == 2)
+        {
+            if (current_selection < 2)
+            {
                 current_selection = current_selection + 1;
             }
-        } else if (current_selection < 4 && menu != 1) {
+        }
+        else if (current_selection < 4 && menu != 1)
+        {
             current_selection = current_selection + 1;
         }
-    } else if (newPos < pos) {
+    }
+    else if (newPos < pos)
+    {
         Serial.print("down");
-        if (current_selection > 1 && menu != 1) {
+        if (current_selection > 1 && menu != 1)
+        {
             current_selection = current_selection - 1;
         }
     }
 
-    switch (menu) {
-        case 1: //Home screen screen
-            current_selection = 0;
-            lcd.setCursor(0, 0);
-            lcd.print(String(Speed) + " Mph");
-            lcd.setCursor(0, 1);
-            lcd.print(String(Temp) + " C");
-            lcd.setCursor(7, 0);
-            lcd.print(String(RPM) + " RPM");
-            lcd.setCursor(7, 1);
-            lcd.print("Mode: " + String(speed_mode));
+    switch (menu)
+    {
+    case 1: // Home screen screen
+        current_selection = 0;
+        lcd.setCursor(0, 0);
+        lcd.print(String(Speed) + " Mph");
+        lcd.setCursor(0, 1);
+        lcd.print(String(Temp) + " C");
+        lcd.setCursor(7, 0);
+        lcd.print(String(rpm_engine) + " RPM");
+        lcd.setCursor(7, 1);
+        lcd.print("Mode: " + String(speed_mode));
 
-            if (buttonpressed == HIGH) { //If the button is pressed and the menu is the home screen then change to the settings menu
-                menu = 2;
-                lcd.clear();
-                current_selection = 1;
-            }
-            break;
-        case 2: //Settings Main menu
-            lcd.setCursor(0, 0);
-            lcd.print("Top Speed");
-            lcd.setCursor(0, 1);
-            lcd.print("Aceleration");
-            if (buttonpressed == HIGH && current_selection == 1) { //If the button is pressed and the current selection is 1 then change to the speed settings menu
-                menu = 3;
-                lcd.clear();
-                current_selection = 1;
+        if (buttonpressed == HIGH)
+        { // If the button is pressed and the menu is the home screen then change to the settings menu
+            menu = 2;
+            lcd.clear();
+            current_selection = 1;
+        }
+        break;
+    case 2: // Settings Main menu
+        lcd.setCursor(0, 0);
+        lcd.print("Top Speed");
+        lcd.setCursor(0, 1);
+        lcd.print("Aceleration");
+        if (buttonpressed == HIGH && current_selection == 1)
+        { // If the button is pressed and the current selection is 1 then change to the speed settings menu
+            menu = 3;
+            lcd.clear();
+            current_selection = 1;
+        }
+        if (buttonpressed == HIGH && current_selection == 2)
+        { // If the button is pressed and the current selection is 2 then change to the aceleration settings menu
+            menu = 4;
+            lcd.clear();
+            current_selection = 1;
+        }
+        break;
+    case 3: // Mode switching menu
+        lcd.setCursor(0, 0);
+        lcd.print("Mode");
+        lcd.setCursor(0, 1);
+        lcd.print("Max");
+        lcd.setCursor(5, 0);
+        lcd.print('1');
+        lcd.setCursor(8, 0);
+        lcd.print('2');
+        lcd.setCursor(11, 0);
+        lcd.print('3');
+        lcd.setCursor(14, 0);
+        lcd.write(byte(1));
+        break;
 
-            }
-            if (buttonpressed == HIGH && current_selection == 2) { //If the button is pressed and the current selection is 2 then change to the aceleration settings menu
-                menu = 4;
-                lcd.clear();
-                current_selection = 1;
-            }
-            break;
-        case 3: //Mode switching menu
-            lcd.setCursor(0, 0);
-            lcd.print("Mode");
-            lcd.setCursor(0, 1);
-            lcd.print("Max");
-            lcd.setCursor(5, 0);
-            lcd.print('1');
-            lcd.setCursor(8, 0);
-            lcd.print('2');
-            lcd.setCursor(11, 0);
-            lcd.print('3');
-            lcd.setCursor(14, 0);
-            lcd.write(byte(1));
-            break;
-
-        case 4: //Aceleration settings menu
-            lcd.setCursor(0, 0);
-            lcd.print("Mode ");
-            lcd.setCursor(0, 1);
-            lcd.print("m/h^2");
-            lcd.setCursor(5, 0);
-            lcd.print('1');
-            lcd.setCursor(8, 0);
-            lcd.print('2');
-            lcd.setCursor(11, 0);
-            lcd.print('3');
-            lcd.setCursor(14, 0);
-            lcd.write(byte(1));
-            break;
+    case 4: // Aceleration settings menu
+        lcd.setCursor(0, 0);
+        lcd.print("Mode ");
+        lcd.setCursor(0, 1);
+        lcd.print("m/h^2");
+        lcd.setCursor(5, 0);
+        lcd.print('1');
+        lcd.setCursor(8, 0);
+        lcd.print('2');
+        lcd.setCursor(11, 0);
+        lcd.print('3');
+        lcd.setCursor(14, 0);
+        lcd.write(byte(1));
+        break;
     }
 
-    //current selection stuff
-    if (menu == 2 && pos != newPos) { //If the menu is the settings menu
+    // current selection stuff
+    if (menu == 2 && pos != newPos)
+    { // If the menu is the settings menu
         lcd.setCursor(12, 0);
         lcd.print(" ");
         lcd.setCursor(12, 1);
         lcd.print(" ");
-        switch (current_selection) { //Arrow position
-            case 1:
-                lcd.setCursor(12, 0);
-                lcd.write(byte(2));
-                break;
-            case 2:
-                lcd.setCursor(12, 1);
-                lcd.write(byte(2));
-                break;
-
+        switch (current_selection)
+        { // Arrow position
+        case 1:
+            lcd.setCursor(12, 0);
+            lcd.write(byte(2));
+            break;
+        case 2:
+            lcd.setCursor(12, 1);
+            lcd.write(byte(2));
+            break;
         }
-    } else if((menu != 2 || menu != 1) && pos != newPos) { // If the menu is not the settings menu or the home screen
+    }
+    else if ((menu != 2 || menu != 1) && pos != newPos)
+    { // If the menu is not the settings menu or the home screen
         lcd.setCursor(5, 1);
         lcd.print(" ");
         lcd.setCursor(8, 1);
@@ -203,41 +247,103 @@ void loop() {
         lcd.print(" ");
         lcd.setCursor(14, 1);
         lcd.print(" ");
-        switch (current_selection) { //Arrow position
-            case 1:
-                lcd.setCursor(5, 1);
-                lcd.write(byte(0));
-                break;
+        switch (current_selection)
+        { // Arrow position
+        case 1:
+            lcd.setCursor(5, 1);
+            lcd.write(byte(0));
+            break;
 
-            case 2:
-                lcd.setCursor(8, 1);
-                lcd.write(byte(0));
+        case 2:
+            lcd.setCursor(8, 1);
+            lcd.write(byte(0));
 
-                break;
-            case 3:
-                lcd.setCursor(11, 1);
-                lcd.write(byte(0));
-                break;
-            case 4: //return arrow for the mode and aceleration settings menu
-                lcd.setCursor(14, 1);
-                lcd.write(byte(0));
-                break;
+            break;
+        case 3:
+            lcd.setCursor(11, 1);
+            lcd.write(byte(0));
+            break;
+        case 4: // return arrow for the mode and aceleration settings menu
+            lcd.setCursor(14, 1);
+            lcd.write(byte(0));
+            break;
         }
     }
-    if (menu != 2 && menu != 1 && current_selection == 4 && buttonpressed == HIGH) {
+    if (menu != 2 && menu != 1 && current_selection == 4 && buttonpressed == HIGH)
+    {
         menu = 2;
         lcd.clear();
         current_selection = 1;
     }
-    //serial print the encoder position
-    if (pos != newPos) {
-        //Serial.print(newPos);
+    // serial print the encoder position
+    if (pos != newPos)
+    {
+        // Serial.print(newPos);
         pos = newPos;
     }
     Serial.print(current_selection);
 
     /*Top Speed and acceleration code below this*/
 
+    // rpm sensor
+    if (revolutions_wheel >= 20)
+    { // Update RPM every 20 counts, increase this for better RPM resolution, decrease for faster update
+        // Calculate RPM for wheel sensor
+        rpm_wheel = 60 * 1000 / (millis() - timeold_wheel) * revolutions_wheel;
+        timeold_wheel = millis();
+        revolutions_wheel = 0;
+        // Calculate speed from RPM to MPH
+        Speed = (rpm_wheel * 18 * 3.14159) / 63360.0; // calculate speed in miles per hour
+
+        // Print RPM and speed to serial
+        // Serial.println(rpm_wheel,DEC);
+        // Serial.println(speed,DEC);
+    }
+    if (revolutions_engine >= 20)
+    { // Update RPM every 20 counts, increase this for better RPM resolution, decrease for faster update
+        // Calculate RPM for engine sensor
+        rpm_engine = 60 * 1000 / (millis() - timeold_engine) * revolutions_engine;
+        timeold_engine = millis();
+        revolutions_engine = 0;
+        // Serial.println(rpm_engine,DEC);
+    }
+    
+    float speed_error = (speed_mode - Speed)/speed_mode; // Error in speed 0-1
+    float throttlecontrol = kp * speed_error; // Proportional control for throttle - wrong equation 
+
+    // throttle servo
+    int max_throttle = 180; // sets max throttle
+    int min_throttle = 0;   // sets min throttle
+
+    throttle = analogRead(gas_pedal_pin);
+    throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
+
+    if (Speed <= speed_mode-10) // if the speed is 10mph use what ever the throttle is
+    {
+        throttle_servo.write(throttle);
+    }
+    else if (Speed > speed_mode - 10 && Speed <+ speed_mode) //if the speed is within 10mph of max speed then use porpotional control
+    {
+        throttle_servo.write((throttle - throttlecontrol*max_throttle)); //not the right equation 
+    }else if (Speed > speed_mode)
+    {
+        throttle_servo.write(0);
+    }
+    
+
+
+
+
 
 }
 
+
+void rpm_engine_function()
+{
+    revolutions_engine++;
+}
+
+void rpm_wheel_function()
+{
+    revolutions_wheel++;
+}
