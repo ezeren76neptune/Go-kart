@@ -10,17 +10,19 @@
             "includePath": [
                 "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/include",
                 "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/src",
+                "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/LiquidCrystal_I2C",
+                "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
                 "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/Servo/src",
                 "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/RotaryEncoder/src",
                 "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/ezButton/src",
                 "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/LiquidCrystal/src",
                 "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/cores/arduino",
                 "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/variants/mega",
+                "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/Unity/src",
                 "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
                 "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/HID/src",
                 "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
                 "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
-                "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
                 ""
             ],
             "browse": {
@@ -28,17 +30,19 @@
                 "path": [
                     "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/include",
                     "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/src",
+                    "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/LiquidCrystal_I2C",
+                    "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
                     "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/Servo/src",
                     "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/RotaryEncoder/src",
                     "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/ezButton/src",
                     "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/LiquidCrystal/src",
                     "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/cores/arduino",
                     "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/variants/mega",
+                    "C:/Users/jacobseno/OneDrive - Milwaukee School of Engineering/Documents/GitHub/Go-kart/.pio/libdeps/megaatmega2560/Unity/src",
                     "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
                     "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/HID/src",
                     "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
                     "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
-                    "C:/Users/jacobseno/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
                     ""
                 ]
             },

@@ -4,11 +4,15 @@
 #include <RotaryEncoder.h>
 #include <pins_arduino.h>
 #include <servo.h>
+#include <LiquidCrystal_I2C.h>
+
+//https://github.com/Jomelo/LCDMenuLib
 
 Servo throttle_servo;
 
 const int RS = 11, EN = 12, D4 = 2, D5 = 3, D6 = 4, D7 = 5;
 LiquidCrystal lcd(RS, EN, D4, D5, D6, D7);
+
 const int Fuel_level_pin = A0;
 const int Speed_pin = A1;
 const int RPM_pin = A2;
@@ -94,7 +98,6 @@ float accelerationMode3()
 {
     return 0.3 * Speed;
 }
-float (*accelerationModes[3])() = {accelerationMode1, accelerationMode2, accelerationMode3};
 
 ezButton button(Menu_switch_pin);
 RotaryEncoder encoder(encoderPin1, encoderPin2);
@@ -331,7 +334,8 @@ void loop()
         }
         else if (prevmenu == 4 && current_selection != 4)
         {
-            aceleration_mode = static_cast<int>(accelerationModes[current_selection]() + 0.5f);
+            aceleration_mode = current_selection;
+            
             Serial.print(aceleration_mode);
         }
         menu = 1;
