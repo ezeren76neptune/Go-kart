@@ -5,6 +5,7 @@
 #include <pins_arduino.h>
 #include <servo.h>
 #include <LiquidCrystal_I2C.h>
+#include <LCDMenuLib2.h>
 
 //https://github.com/Jomelo/LCDMenuLib
 
