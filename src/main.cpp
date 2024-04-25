@@ -50,7 +50,7 @@ void rpm_wheel_function()
     revolutions_wheel++;
 }
 
-void moveServo(Servo &servo, int targetPosition)
+void moveServo(Servo & servo, int targetPosition)
 {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval)
@@ -71,7 +71,7 @@ void moveServo(Servo &servo, int targetPosition)
 int menu = 1;
 int prevMenu = -1;
 int Fuel_level = 0;
-float Speed = 0;
+float Speed = 0; // Speed in MPH
 int Temp = 0;
 int Ligth_switch_mode = 0;
 int speed_mode = 0;
@@ -82,28 +82,43 @@ int Kp = .1; // Proportional control constant for throttle
 int prevmenu = 0;
 
 // throttle servo
-int max_throttle = 180; // sets max throttle
-int min_throttle = 0;   // sets min throttle
+int max_throttle_pos = 1023; // Tells the program what the max throttle value is (0-1023)
+int min_throttle_pos = 0;   // tells the program what the min throttle value is (0-1023)
+int max_carb_pos = 180; // sets max carb position
+int min_carb_pos = 0;   // sets min carb position
+float throttle_percent = 0; // sets the throttle percent to 0
+float carb_pos = 0; // sets the carb position to 0
+int u = 0; // time in miliseconds per step at mph = 0
+float a = 0; // constant for acceleration equation
 
 int speed_offset = 10; //point at which the max throttle will start to decrease
+int max_speed_carb_offset = 0; // offset for the max speed
 
 // Change these for the three different speed modes
-int speedmodes[3] = {25, 35, 100}; // array for the different speed modes
+int speedmodes[3] = {25, 35, 100};
+int max_speed_carb_offset_array[3] = {20, 30 , 40}; // array for the different speed modes
 
 // Acceleration equations
-float accelerationMode1()
+//use this link for help with the equations https://www.desmos.com/calculator/m5c8bwpr22
+
+float accelerationMode1() //muddy
 {
-    return 0.1 * Speed;
+    u = 40; //milisecconds
+    a = .05; //constant
+    return u*exp(Speed*a);
 }
 
-float accelerationMode2()
+float accelerationMode2() //normal
 {
-    return 0.2 * Speed;
+    u = 20; //milisecconds
+    a = .05; //constant
+    return u*exp(Speed*a);
 }
 
-float accelerationMode3()
+float accelerationMode3() //there should be no acceleration equation for this mode and just return 0 miliseconds
 {
-    return 0.3 * Speed;
+    u = 0; //milisecconds
+    return u; // 
 }
 
 ezButton button(Menu_switch_pin);
@@ -165,6 +180,16 @@ void setup()
 
     // servo setup
     throttle_servo.attach(9);
+
+    //Sets the base values for the gokart so you dont need to set something if you just get into drive
+    // - No acceleration curve
+    // - No Max speed - set to an unobtainable value of 100mph
+    // - No max speed carb offset
+    // - No speed offset
+    speed_offset = 0;
+    max_speed_carb_offset = 0;
+    speed_mode = speedmodes[3];
+    aceleration_mode = 3;
 }
 
 void loop()
@@ -337,6 +362,8 @@ void loop()
         if (prevmenu == 3 && current_selection != 4) // If the previous menu was the speed settings menu
         {
             speed_mode = speedmodes[current_selection];
+            max_speed_carb_offset = max_speed_carb_offset_array[current_selection];
+
             Serial.print(speed_mode);
         }
         else if (prevmenu == 4 && current_selection != 4)
@@ -403,21 +430,25 @@ void loop()
     float throttlecontrol = Kp * speed_error;              // Proportional control for throttle
 
 
-    throttle = analogRead(gas_pedal_pin);
-    throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
+    throttle = analogRead(gas_pedal_pin); // reads the throttle value from the gas pedal from 1 - 1023
+    throttle_percent = map(throttle, min_throttle_pos, max_throttle_pos, 0, 1); // maps the throttle to the servo from min to max throttle
 
     if (Speed <= speed_mode - 10) // if the speed is 10mph use what ever the throttle is
     {
-        moveServo(throttle_servo, throttle);
+        carb_pos = map(throttle_percent, 0, 1, min_carb_pos, max_carb_pos); // maps the throttle to the servo from min to max throttle
+        moveServo(throttle_servo, carb_pos); // sets the carb sero to the new throttle value (carb_pos) using the moveservo function
     }
     else if (Speed > speed_mode - speed_offset && Speed <= speed_mode) // if the speed is within 10mph of max speed then use proportional control
     {
-        int controlled_throttle = throttle - throttlecontrol * (max_throttle - min_throttle);
-        controlled_throttle = max(min_throttle, min(controlled_throttle, max_throttle)); // Ensure the throttle is within the min and max range
-        moveServo(throttle_servo, controlled_throttle);
+        //carb_pos = ... // finds the carb position at the max throttle value.
+        //carb_pos  = carb_pos * ... // finds the new carb position based on the throttle percent
+        moveServo(throttle_servo, carb_pos); // sets the carb sero to the updated carb position using the moveservo function
     }
     else if (Speed > speed_mode)
     {
-        moveServo(throttle_servo, min_throttle); // Set to min throttle when speed is greater than speed_mode
+        throttle_servo.write(min_carb_pos+max_speed_carb_offset); 
+        //skips using the moveservo function and sets the carb position to the min carb position 
+        //when it gets above the max speed then adds the throttle offset to the max speed so that
+        //the gokart will stay at the max speed instead of just closing the throttle completely
     }
 }
