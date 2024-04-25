@@ -7,8 +7,6 @@
 #include <LiquidCrystal_I2C.h>
 #include <LCDMenuLib2.h>
 
-//https://github.com/Jomelo/LCDMenuLib
-
 Servo throttle_servo;
 
 const int RS = 11, EN = 12, D4 = 2, D5 = 3, D6 = 4, D7 = 5;
