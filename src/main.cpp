@@ -80,6 +80,12 @@ float throttle = 0;
 int Kp = .1; // Proportional control constant for throttle
 int prevmenu = 0;
 
+// throttle servo
+int max_throttle = 180; // sets max throttle
+int min_throttle = 0;   // sets min throttle
+
+int speed_offset = 10; //point at which the max throttle will start to decrease
+
 // Change these for the three different speed modes
 int speedmodes[3] = {25, 35, 100}; // array for the different speed modes
 
@@ -395,9 +401,6 @@ void loop()
     float speed_error = (speed_mode - Speed) / speed_mode; // Error in speed 0-1
     float throttlecontrol = Kp * speed_error;              // Proportional control for throttle
 
-    // throttle servo
-    int max_throttle = 180; // sets max throttle
-    int min_throttle = 0;   // sets min throttle
 
     throttle = analogRead(gas_pedal_pin);
     throttle = map(throttle, 0, 1023, min_throttle, max_throttle); // maps the throttle to the servo from min to max throttle
@@ -406,7 +409,7 @@ void loop()
     {
         moveServo(throttle_servo, throttle);
     }
-    else if (Speed > speed_mode - 10 && Speed <= speed_mode) // if the speed is within 10mph of max speed then use proportional control
+    else if (Speed > speed_mode - speed_offset && Speed <= speed_mode) // if the speed is within 10mph of max speed then use proportional control
     {
         int controlled_throttle = throttle - throttlecontrol * (max_throttle - min_throttle);
         controlled_throttle = max(min_throttle, min(controlled_throttle, max_throttle)); // Ensure the throttle is within the min and max range
