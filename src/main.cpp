@@ -1,7 +1,5 @@
 #include <LiquidCrystal.h>
 #include <Arduino.h>
-#include <ezButton.h>
-#include <RotaryEncoder.h>
 #include <pins_arduino.h>
 #include <servo.h>
 #include <LiquidCrystal_I2C.h>
@@ -18,9 +16,9 @@ const int Speed_pin = A1;
 const int RPM_pin = A2;
 const int Temp_pin = A3;
 const int Ligth_switch_pin = 9;
-const int Menu_switch_pin = 6; // Button
-const int encoderPin1 = A5;    // Rotary encoder
-const int encoderPin2 = A6;    // Rotary encoder
+const int Encoder_button = 19; // Button
+const int encoderPin1 = 18;    // Rotary encoder
+const int encoderPin2 = 20;    // Rotary encoder
 const int hallPin_engine = 7;  // Hall effect sensor pin for engine
 const int hallPin_wheel = 8;   // Hall effect sensor pin for wheel
 const int gas_pedal_pin = A4;  // Gas pedal pin
@@ -35,6 +33,39 @@ unsigned long previousMillis = 0; // will store last time servo was updated
 int currentPosition = 0;          // current position of the servo, set to 0 for initialization
 unsigned int interval = 15;       // interval at which to move servo (milliseconds)
 int targetPosition = 0;           // target position for the servo, Set at 0 for initialization
+volatile int buttonpressed_encoder = 0;    // button state of the encoder button
+volatile int pos = 0;
+volatile int pos_old = 0;                      // encoder position
+int encoder_direction = 0;        // encoder direction
+const unsigned long debounceTime = 200;
+int prev_enc_state = 0;
+
+int menu = 1;
+float Speed = 0;          // Speed in MPH
+int Temp = 0;             // Temperature of the coolent
+int speed_mode = 0;       // what speed mode is being used, initilaizes it as 0
+int aceleration_mode = 0; // What acceleration mode is being used
+int current_selection = 0;
+float throttle = 0;
+
+// throttle servo
+int max_throttle_pos = 1023; // Tells the program what the max throttle value is (0-1023)
+int min_throttle_pos = 0;    // tells the program what the min throttle value is (0-1023)
+int max_carb_pos = 180;      // sets max carb position
+int min_carb_pos = 0;        // sets min carb position
+float new_throttle = 0;      // sets the throttle percent to 0
+float carb_pos = 0;          // sets the carb position to 0
+int u = 0;                   // time in miliseconds per step at mph = 0
+float a = 0;                 // constant for acceleration equation
+int Q = .1;                  // Proportional control constant for throttle
+
+int speed_offset = 10;         // point at which the max throttle will start to decrease
+int max_speed_carb_offset = 0; // offset for carb at max speed, so the throttle doesnt close all the way so you can stay at max speed
+
+// Change these for the three different speed modes
+int speedmodes[3] = {25, 35, 100};
+int max_speed_carb_offset_array[3] = {20, 30, 40}; // array for the different speed modes
+
 
 // RPM sensor stuff engine and at wheel
 volatile byte revolutions_engine;
@@ -44,6 +75,58 @@ int rpm_engine = 0;
 volatile byte revolutions_wheel;
 unsigned long timeold_wheel;
 int rpm_wheel = 0;
+
+int Timed_out_delay = 5;
+int current_menu_value = 0; // Home screen = 1
+int top_menu = 0;
+int bottom_menu = 0;
+
+//ezButton Enc_Btn(Encoder_button);
+
+// custom characters
+byte up_arrow[8] = {
+    0b00100,
+    0b01110,
+    0b10101,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b00000,
+    0b00000};
+
+byte return_arrow[8] = {
+    0b00100,
+    0b01000,
+    0b11111,
+    0b01001,
+    0b00101,
+    0b00001,
+    0b00111,
+    0b00000};
+
+byte sideways_arrow[8] = {
+    0b00000,
+    0b00100,
+    0b01000,
+    0b11111,
+    0b01000,
+    0b00100,
+    0b00000,
+    0b00000};
+
+
+struct MenuMap
+{
+    String MenuName;
+    int menu_value;
+    int menu_before;
+    int menu_order;
+    String menu_type;
+    int Adjustable_Variable;
+    int Menus_under; //Number of menus under it, this is for the selection screens
+};
+
+
 
 // global functions
 void rpm_engine_function()
@@ -76,34 +159,6 @@ void moveServo(Servo &servo, int targetPosition)
         }
     }
 }
-
-int menu = 1;
-float Speed = 0;          // Speed in MPH
-int Temp = 0;             // Temperature of the coolent
-int speed_mode = 0;       // what speed mode is being used, initilaizes it as 0
-int aceleration_mode = 0; // What acceleration mode is being used
-int current_selection = 0;
-float throttle = 0;
-int prevmenu = 0;
-
-// throttle servo
-int max_throttle_pos = 1023; // Tells the program what the max throttle value is (0-1023)
-int min_throttle_pos = 0;    // tells the program what the min throttle value is (0-1023)
-int max_carb_pos = 180;      // sets max carb position
-int min_carb_pos = 0;        // sets min carb position
-float new_throttle = 0;      // sets the throttle percent to 0
-float carb_pos = 0;          // sets the carb position to 0
-int u = 0;                   // time in miliseconds per step at mph = 0
-float a = 0;                 // constant for acceleration equation
-int Q = .1;                  // Proportional control constant for throttle
-
-int speed_offset = 10;         // point at which the max throttle will start to decrease
-int max_speed_carb_offset = 0; // offset for carb at max speed, so the throttle doesnt close all the way so you can stay at max speed
-
-// Change these for the three different speed modes
-int speedmodes[3] = {25, 35, 100};
-int max_speed_carb_offset_array[3] = {20, 30, 40}; // array for the different speed modes
-
 // Acceleration equations
 // use this link for help with the equations https://www.desmos.com/calculator/m5c8bwpr22
 
@@ -140,36 +195,50 @@ void LightToggle(int pin, int state)
     pinMode(pin, OUTPUT);
     digitalWrite(pin, state);
 }
-ezButton button(Menu_switch_pin);
-RotaryEncoder encoder(encoderPin1, encoderPin2);
 
-/*/ Experimental code for the menu -------------------------------------------------------------------------------------------------------------------------------------
-int Timed_out_delay = 5;
-int current_menu_value = 1; // Home screen = 1
-int top_menu = 0;
-int bottom_menu = 0;
-struct MenuMap
+void checkencoderpos()
 {
-    String MenuName;
-    int menu_value;
-    int menu_before;
-    int menu_order;
-    String menu_type;
-    int Adjustable_Variable;
-};
+    static unsigned long lastInterruptTime = 0;
+    unsigned long interruptTime = millis();
+    if (interruptTime - lastInterruptTime > 5)
+    {
+        static int PrevEnPin1 = 0;
+        static int PrevEnPin2 = 0;
+        int currentpinval1 = digitalRead(encoderPin1);
+        int currentpinval2 = digitalRead(encoderPin2);
+            if (currentpinval2 != currentpinval1) {
+            pos_old = pos;
+            pos++;
+            } else {
+            pos_old = pos;
+            pos--;
+            }
+    PrevEnPin1 = currentpinval1;
+    PrevEnPin2 = currentpinval2;
+    }
+}
 
-
-//  Menu Name, Menu Value, Menu Before, Menu Order, Menu Type , Adjustable Variable(if needed)
+//  Menu Name, Menu Value, Menu Before, Menu Order, Menu Type , Adjustable Variable(if needed) , Number of menus under it(selection screens)
+//  Menu Values start at zero, Home screen should be 0
 MenuMap Generated_menu[] = {
-    {"Home Screen", 1, 0, 1, "Home Screen", NULL},
-    {"Selection Screen", 2, 1, 1, "Selection", NULL},
-    {"Acceleration screen", 3, 2, 1, "Adjustable Variable", aceleration_mode},
-    {"Speed screen", 4, 2, 1, "Adjustable Variable", speed_mode}
+    {"Home Screen", 0, NULL, 1, "Home Screen", NULL, NULL},
+    {"Selection Screen", 1, 0, 1, "Selection", NULL, 3},
+    {"Acceleration", 2, 1, 1, "Adjustable Variable", aceleration_mode, NULL},
+    {"Speed", 3, 1, 2, "Adjustable Variable", speed_mode, NULL},
+    {"Light Menu", 4, 1, 3, "Selection", NULL, 3},
+    {"Front lights", 5, 4, 1, "Adjustable Variable", NULL, NULL},
+    {"Fog Lights", 6, 4, 2, "Adjustable Variable", NULL, NULL},
+    {"Rear Lights", 7, 4, 3, "Adjustable Variable", NULL, NULL},
+    {"Back", 8, 1, 4, "Back", NULL, NULL},
+    {"Back", 8, 4, 4, "Back", NULL, NULL}
     // Add more menus as needed
 };
 
-void displaymenu(int current_position,int menu_size)
-{
+void displaymenu(int current_position,int menu_size) {
+static int prevmenu = current_menu_value;
+int bottom_menu_j = bottom_menu;
+int top_menu_j = top_menu;
+
 if (Generated_menu[current_position].menu_type == "Home Screen")
 {
     lcd.clear();
@@ -182,34 +251,88 @@ if (Generated_menu[current_position].menu_type == "Home Screen")
     lcd.setCursor(8, 1);
     lcd.print("Mode: " + String(speed_mode));
     current_menu_value = Generated_menu[current_position].menu_value;
+    //Serial.println("Menu Displayed: " + String(Generated_menu[current_position].MenuName));
+    //Serial.println("Current Menu Value: " + String(current_menu_value));
 }
 else if (Generated_menu[current_position].menu_type == "Selection")
-{
-    for (int j = 0; j < menu_size; j++)
+{   
+    //Serial.println("top menu: " + String(top_menu_j));
+    current_menu_value = Generated_menu[current_position].menu_value;
+    //Serial.println("Menu Displayed: " + String(Generated_menu[current_position].MenuName));
+    //Serial.println("Current Menu Value: " + String(current_menu_value));
+    //Serial.println("Current position from input: " + String(current_position));    
+    //Serial.println("Searching for Top menu");
+    for (int j = 0;j < menu_size; j++)
     {
-        if (Generated_menu[current_position].menu_value == Generated_menu[j].menu_before && Generated_menu[j].menu_order == top_menu)
+      //Serial.println("j value: " + String(j));
+      //Serial.println("Menu name from current position of J: " + Generated_menu[j].MenuName);
+      //Serial.println("Menu before value of menu from J: " + String(Generated_menu[j].menu_before));
+        if (Generated_menu[current_position].menu_value == Generated_menu[j].menu_before)
         {
-            top_menu = j;
+          //Serial.println("inside first if");
+          //Serial.println("menu order of current j value: " + String(Generated_menu[j].menu_order));
+          if (Generated_menu[j].menu_order == top_menu_j)
+          {
+            //Serial.println("Current Top menu name: " + String(Generated_menu[top_menu_j].MenuName));
+            top_menu_j = j;
+            current_selection = j;
+            //Serial.println("new top menu: " + String(top_menu_j));
+            break;
+          }
         }
-        if (Generated_menu[j].menu_order == top_menu + 1) {
-            bottom_menu = j;
+    }
+    //Serial.println("Searching for Bottom menu");
+    for (int j = 0;j < menu_size; j++)
+    {
+      //Serial.println("j value: " + String(j));
+      //Serial.println("Menu name from current position of J: " + Generated_menu[j].MenuName);
+      //Serial.println("Menu before value of menu from J: " + String(Generated_menu[j].menu_before));
+        if (Generated_menu[current_position].menu_value == Generated_menu[j].menu_before)
+        {
+          //Serial.println("inside first if");
+          //Serial.println("menu order of current j value: " + String(Generated_menu[j].menu_order));
+
+          if (Generated_menu[j].menu_order == Generated_menu[top_menu_j].menu_order + 1)
+          {
+            bottom_menu_j = j;
+            //Serial.println("new bottom menu: " + String(bottom_menu_j));
+            break;
+          } else {
+            bottom_menu_j = NULL;
+          }
+            
         }
     }
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print(Generated_menu[top_menu].MenuName);
+    lcd.print(Generated_menu[top_menu_j].MenuName);
     lcd.setCursor(0, 1);
-    lcd.print(Generated_menu[bottom_menu].MenuName);
-    current_menu_value = Generated_menu[current_position].menu_value;
+    if (bottom_menu_j != NULL) {
+      lcd.print(Generated_menu[bottom_menu_j].MenuName);
+    } else {
+      lcd.write(" ");
+    }
+    lcd.setCursor(14, 0);
+    lcd.write(2);
+    
 }
+
 else if (Generated_menu[current_position].menu_type == "Adjustable Variable")
 {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print(Generated_menu[current_position].MenuName + " " + Generated_menu[current_position].Adjustable_Variable);
-    current_menu_value = Generated_menu[current_position].menu_before; //not sure about this line
+    lcd.print(Generated_menu[current_position].MenuName + " " + Generated_menu[current_position].Adjustable_Variable); //not sure about this line
+    current_menu_value = Generated_menu[current_position].menu_value;
 }
-
+else if (Generated_menu[current_position].menu_type == "Back")
+{
+    prevmenu = Generated_menu[current_menu_value].menu_before;
+    top_menu = 1;
+    SelectMenu(Generated_menu[prevmenu].MenuName);
+    //Serial.println(Generated_menu[prevmenu].MenuName);
+    //Serial.println(prevmenu);
+}
+//prevmenu = Generated_menu[current_position].menu_value;
 }
 
 //Checks to make sure that the Name of the selected menu is in the menu list.
@@ -219,71 +342,46 @@ void SelectMenu(String Selected_Menu) {
     int menu_size = sizeof(Generated_menu) / sizeof(Generated_menu[0]);
     for (int i = 0; i < menu_size; i++)
     {
+        //Serial.print("Searching for menu\n");
+        //Serial.println("Searching for menu...   Currently at: "  + String(Generated_menu[i].MenuName));
+
         if (Generated_menu[i].MenuName == Selected_Menu)
         {
-            if (Generated_menu[i].menu_before == current_menu_value)
-            {
+          //Serial.println("Menu Found: " + String(Generated_menu[i].MenuName));
+          //Serial.println("Selected menu " + String(Selected_Menu));
+          //Serial.println("required prev menu " + String(current_menu_value));
+          //Serial.println("Current prev menu " + String(Generated_menu[i].menu_before));
+            //if (Generated_menu[i].menu_before == current_menu_value || Generated_menu[i].menu_before == NULL)
+            //{
+                //Serial.println("Attempted to display " + String(Generated_menu[i].MenuName));
                 displaymenu(i,menu_size);
+                return;
                 //sends the menu value and type to the display menu function
                 //if the selected menu is in the menu and the current menu is before it
-            }
+            //}
             
-            
-            break; //needs this break to stop the loop from continuing
+          //Serial.println("Incorrect previous menu"); 
+          //return;
         }
-    } 
+    }
+    Serial.print("Could Not Find menu");
+    return; 
 }
-
-
-//Durring loop
-/*if (buttonpressed == HIGH && Generated_menu[current_menu_value].menu_value == 1)
-{
-    SelectMenu("Selection Screen");
-    top_menu = 1;
-    if
+/*
+boolean button_pressed(int button_name_pin) {
+  static int prev_millis = 0;
+  static int prev_state = 0;
+  int pushed = 0;
+  int current_millis = millis();
+  // Serial.println("Millis past prev state: " + String(current_millis-prev_millis));
+  if (current_millis >= prev_millis + 50 && digitalRead(button_name_pin) != prev_state){
+    pushed = digitalRead(button_name_pin);
+    prev_millis = current_millis;
+  }
+  prev_state = pushed;
+  return pushed;
 }
-else if (buttonpressed == HIGH && Generated_menu[current_menu_value].menu_type == "Selection")
-{
-    SelectMenu(Generated_menu[current_selection].MenuName);
-}
-else if (buttonpressed == HIGH && Generated_menu[current_menu_value].menu_type == "Adjustable Variable")
-{
-}
-
-// if on homescreen update the the values, but not everything, just the values
-// END OF EXPERIMENTAL CODE -------------------------------------------------------------------------------------------------------------------------------------*/
-
-// custom characters
-byte up_arrow[8] = {
-    0b00100,
-    0b01110,
-    0b10101,
-    0b00100,
-    0b00100,
-    0b00100,
-    0b00000,
-    0b00000};
-
-byte return_arrow[8] = {
-    0b00100,
-    0b01000,
-    0b11111,
-    0b01001,
-    0b00101,
-    0b00001,
-    0b00111,
-    0b00000};
-
-byte sideways_arrow[8] = {
-    0b00000,
-    0b00100,
-    0b01000,
-    0b11111,
-    0b01000,
-    0b00100,
-    0b00000,
-    0b00000};
-
+*/
 void setup()
 {
     lcd.begin(16, 2);    // set up number of columns and rows
@@ -301,10 +399,17 @@ void setup()
     rpm_engine = 0;
     timeold_engine = 0;
 
-    attachInterrupt(digitalPinToInterrupt(hallPin_wheel), rpm_wheel_function, RISING); // Interrupt on hallPin, so that's where the hall sensor needs to be
+    attachInterrupt(digitalPinToInterrupt(hallPin_wheel), rpm_wheel_function, CHANGE); // Interrupt on hallPin, so that's where the hall sensor needs to be
     revolutions_wheel = 0;
     rpm_wheel = 0;
     timeold_wheel = 0;
+
+    //attachInterrupt(digitalPinToInterrupt(Menu_switch_pin), encoderbuttoncheck, CHANGE);
+
+
+    //Encoder interrupts
+    attachInterrupt(digitalPinToInterrupt(encoderPin1), checkencoderpos, RISING);
+    //attachInterrupt(digitalPinToInterrupt(encoderPin2), checkencoderpos, CHANGE);
 
     // servo setup
     throttle_servo.attach(9);
@@ -318,205 +423,63 @@ void setup()
     max_speed_carb_offset = 0;
     speed_mode = speedmodes[3];
     aceleration_mode = 3;
+    //button.setDebounceTime(50);
+    pinMode(encoderPin1, INPUT);
+    pinMode(encoderPin2, INPUT);
+    pinMode(Encoder_button, INPUT_PULLUP);
+    current_menu_value = 1;
+    SelectMenu("Home Screen");
+    top_menu = 0;
+    prev_enc_state = LOW;
 }
 
 void loop()
 {
-    // Button Stuff
-    button.loop();
-    int buttonpressed = button.isPressed();
-    button.setDebounceTime(50); // set debounce time to 50 milliseconds
-                                // encoder set up stuff
-    static int pos = 0;
-    encoder.tick();
-    static int newPos = encoder.getPosition();
-    // serial print the button state
-    if (buttonpressed == HIGH)
+  /* this is for accual code, make sure to change all digitalRead(Encoder_button) == LOW to Encoder_Btn_pressed == HIGH
+  Enc_Btn.loop();
+  int Encoder_Btn_pressed = Enc_Btn.getState();
+  Serial.println(Encoder_Btn_pressed);
+*/
+
+    if (digitalRead(Encoder_button) == LOW && Generated_menu[current_menu_value].menu_type == "Home Screen" && prev_enc_state == LOW)
     {
-        Serial.print("Button pressed\n");
+        //Serial.println("Button Pressed:  Attempting to go to Selection Screen");
+        top_menu = 1; //needs to be before the selection screen
+        SelectMenu("Selection Screen");
+        prev_enc_state = !(digitalRead(Encoder_button));
+        //Serial.println("Top Menu: " + String(top_menu));
     }
-    // changes the current selection based on the encoder position
 
-    if (newPos > pos)
+    if (Generated_menu[current_menu_value].menu_type == "Selection" && pos != pos_old) {
+      if (pos > pos_old) {
+        if (top_menu < Generated_menu[current_menu_value].Menus_under + 1) {
+        top_menu++; //Tells the menu system what the top menu value is, this counts up from 1. This is not a position value overall but where in the selection menu the top menu is.
+        }
+    } else if (pos < pos_old) {
+        if (top_menu > 1) {
+        top_menu--;
+        }
+    }
+    SelectMenu(Generated_menu[current_menu_value].MenuName);
+    //Serial.println("Top Menu: " + String(top_menu));
+    //Serial.println(Generated_menu[current_menu_value].MenuName);
+    //Serial.println(pos);
+    
+    }
+  
+    if (digitalRead(Encoder_button) == LOW && Generated_menu[current_menu_value].menu_type == "Selection" && prev_enc_state == LOW)
+    {   
+        top_menu = 1;
+        SelectMenu(Generated_menu[current_selection].MenuName);
+    }
+
+    //Serial.println(digitalRead(Encoder_button));
+    /*
+    else if (buttonpressed_encoder == HIGH && Generated_menu[current_menu_value].menu_type == "Adjustable Variable")
     {
-        Serial.print("up\n");
-        if (menu == 2)
-        {
-            if (current_selection < 2)
-            {
-                current_selection = current_selection + 1;
-            }
-        }
-        else if (current_selection < 4 && menu != 1)
-        {
-            current_selection = current_selection + 1;
-        }
-    }
-    else if (newPos < pos)
-    {
-        Serial.print("down\n");
-        if (current_selection > 1 && menu != 1)
-        {
-            current_selection = current_selection - 1;
-        }
-    }
-    //Serial.print(current_selection + "\n");
-
-    switch (menu)
-    {
-    case 1: // Home screen screen
-        current_selection = 0;
-        lcd.setCursor(0, 0);
-        lcd.print(String(int(floor(Speed))) + " Mph");
-        lcd.setCursor(0, 1);
-        lcd.print(String(Temp) + " C");
-        lcd.setCursor(8, 0);
-        lcd.print(String(rpm_engine) + " RPM");
-        lcd.setCursor(8, 1);
-        lcd.print("Mode: " + String(speed_mode));
-        if (buttonpressed == HIGH) // If the button is pressed and the menu is the home screen then change to the settings menu
-        { 
-            prevmenu = menu;
-            menu = 2;
-            lcd.clear();
-            current_selection = 1;
-        }
-        break;
-    case 2: // Settings Main menu
-        lcd.setCursor(0, 0);
-        lcd.print("Top Speed");
-        lcd.setCursor(0, 1);
-        lcd.print("Aceleration");
-        if (buttonpressed == HIGH && current_selection == 1)
-        { // If the button is pressed and the current selection is 1 then change to the speed settings menu
-            menu = 3;
-            lcd.clear();
-            current_selection = 1;
-            //Serial.print("Speed settings menu\n");
-        }
-        if (buttonpressed == HIGH && current_selection == 2)
-        { // If the button is pressed and the current selection is 2 then change to the aceleration settings menu
-            menu = 4;
-            lcd.clear();
-            current_selection = 1;
-        }
-        break;
-    case 3: // Speed Mode switching menu
-        lcd.setCursor(0, 0);
-        lcd.print("Mode");
-        lcd.setCursor(0, 1);
-        lcd.print("Max");
-        lcd.setCursor(5, 0);
-        lcd.print('1');
-        lcd.setCursor(8, 0);
-        lcd.print('2');
-        lcd.setCursor(11, 0);
-        lcd.print('3');
-        lcd.setCursor(14, 0);
-        lcd.write(byte(1));
-        prevmenu = menu;
-        
-        break;
-
-    case 4: // Aceleration settings menu
-        lcd.setCursor(0, 0);
-        lcd.print("Mode ");
-        lcd.setCursor(0, 1);
-        lcd.print("m/h^2");
-        lcd.setCursor(5, 0);
-        lcd.print('1');
-        lcd.setCursor(8, 0);
-        lcd.print('2');
-        lcd.setCursor(11, 0);
-        lcd.print('3');
-        lcd.setCursor(14, 0);
-        lcd.write(byte(1));
-        prevmenu = menu; // sets the previous menu to the current menu so the slecection menu knows which setting to change as the selection code is used for both menus
-        break;
-    }
-
-    // current selection stuff
-    if (menu == 2 && pos != newPos)
-    { // If the menu is the settings menu
-        lcd.setCursor(12, 0);
-        lcd.print(" ");
-        lcd.setCursor(12, 1);
-        lcd.print(" ");
-        switch (current_selection)
-        { // Arrow position
-        case 1:
-            lcd.setCursor(12, 0);
-            lcd.write(byte(2));
-            break;
-        case 2:
-            lcd.setCursor(12, 1);
-            lcd.write(byte(2));
-            break;
-        }
-    }
-    else if ((menu != 2 || menu != 1) && pos != newPos)
-    { // If the menu is not the settings menu or the home screen
-        lcd.setCursor(5, 1);
-        lcd.print(" ");
-        lcd.setCursor(8, 1);
-        lcd.print(" ");
-        lcd.setCursor(11, 1);
-        lcd.print(" ");
-        lcd.setCursor(14, 1);
-        lcd.print(" ");
-        switch (current_selection)
-        { // Arrow position
-        case 1:
-            lcd.setCursor(5, 1);
-            lcd.write(byte(0));
-            break;
-
-        case 2:
-            lcd.setCursor(8, 1);
-            lcd.write(byte(0));
-
-            break;
-        case 3:
-            lcd.setCursor(11, 1);
-            lcd.write(byte(0));
-            break;
-        case 4: // return arrow for the mode and aceleration settings menu
-            lcd.setCursor(14, 1);
-            lcd.write(byte(0));
-            break;
-        }
-    }
-    if (menu != 2 && menu != 1 && buttonpressed == HIGH) // If the menu is not the home screen or the settings menu and the button is pressed
-    {
-        if (prevmenu == 3 && current_selection != 4) // If the previous menu was the speed settings menu
-        {
-            speed_mode = speedmodes[current_selection];
-            max_speed_carb_offset = max_speed_carb_offset_array[current_selection];
-
-            Serial.print(speed_mode);
-            Serial.print("speed mode changed to: " + speed_mode + String("\n"));
-        }
-        else if (prevmenu == 4 && current_selection != 4)
-        {
-            aceleration_mode = current_selection;
-            Serial.print(aceleration_mode);
-            Serial.print("aceleration mode changed to: " + aceleration_mode + String("\n"));
-        }
-
-        menu = 1;
-        lcd.clear();
-        current_selection = 1;
         
     }
-
-    // serial print the encoder position
-    if (pos != newPos)
-    {
-       // Serial.print(newPos);
-        pos = newPos;
-    }
-    // Serial.print(current_selection);
-
+/*
     //Top Speed and acceleration code below this
     // rpm sensor
     if (revolutions_wheel >= 20)
@@ -572,7 +535,7 @@ void loop()
     speed_offset            //point at which the max throttle will start to decrease
     max_speed_carb_offset   // offset for the max speed
     speed_mode              //what speed mode is being used (Top speed)
-    */
+    
 
     throttle = analogRead(gas_pedal_pin);                                     // reads the throttle value from the gas pedal from 1 - 1023
     new_throttle = map(throttle, min_throttle_pos, max_throttle_pos, 0, 100); // maps the throttle to the servo from min to max throttle
@@ -597,5 +560,10 @@ void loop()
         // when it gets above the max speed then adds the throttle offset to the max speed so that
         // the gokart will stay at the max speed instead of just closing the throttle completely
     }
+
+    
     Serial.print(String("menu: ") + menu + String("     prevmenu: ") + prevmenu + "\n");
+    */
+  pos_old = pos;
+  prev_enc_state = !digitalRead(Encoder_button);
 }
