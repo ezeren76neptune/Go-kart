@@ -5,6 +5,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <ezButton.h>
 
+
 Servo throttle_servo;
 
 const int RS = 11, EN = 12, D4 = 2, D5 = 3, D6 = 4, D7 = 5;
@@ -121,7 +122,7 @@ struct MenuMap
     int menu_before;
     int menu_order;
     String menu_type;
-    int Adjustable_Variable;
+    int* Adjustable_Variable;
     int Menus_under; // Number of menus under it, this is for the selection screens
     int max_range;
 };
@@ -224,8 +225,8 @@ void checkencoderpos()
 MenuMap Generated_menu[] = {
     {"Home Screen", 0, NULL, 1, "Home Screen", NULL, NULL, NULL},
     {"Selection Screen", 1, 0, 1, "Selection", NULL, 3, NULL},
-    {"Acceleration", 2, 1, 1, "Adjustable Variable", aceleration_mode, NULL, 3},
-    {"Speed", 3, 1, 2, "Adjustable Variable", speed_mode, NULL, 3},
+    {"Acceleration", 2, 1, 1, "Adjustable Variable", &aceleration_mode, NULL, 3},
+    {"Speed", 3, 1, 2, "Adjustable Variable", &speed_mode, NULL, 3},
     {"Light Menu", 4, 1, 3, "Selection", NULL, 3, NULL},
     {"Front lights", 5, 4, 1, "Adjustable Variable", NULL, NULL, 2},
     {"Fog Lights", 6, 4, 2, "Adjustable Variable", NULL, NULL, 2},
@@ -245,13 +246,27 @@ void displaymenu(int current_position, int menu_size)
     {
         lcd.clear();
         lcd.setCursor(0, 0);
-        lcd.print(String(int(floor(Speed))) + " Mph");
+        lcd.print(String(int(floor(Speed))));
+        lcd.setCursor(5, 0);
+        lcd.print("Mph");
         lcd.setCursor(0, 1);
-        lcd.print(String(Temp) + " C");
-        lcd.setCursor(8, 0);
-        lcd.print(String(rpm_engine) + " RPM");
-        lcd.setCursor(8, 1);
-        lcd.print("Mode: " + String(speed_mode));
+        lcd.print(String(rpm_engine));
+        lcd.setCursor(5, 1);
+        lcd.print("RPM");
+        lcd.setCursor(9, 0);
+        lcd.print(String(Temp));
+        lcd.setCursor(13, 0);
+        lcd.print("C");
+        lcd.setCursor(9, 1);
+        lcd.print("S");
+        lcd.setCursor(10, 1);
+        lcd.print(String(speed_mode));
+        lcd.setCursor(13, 1);
+        lcd.print("A");
+        lcd.setCursor(14, 1);
+        lcd.print(String(aceleration_mode));
+
+
         current_menu_value = Generated_menu[current_position].menu_value;
         // Serial.println("Menu Displayed: " + String(Generated_menu[current_position].MenuName));
         // Serial.println("Current Menu Value: " + String(current_menu_value));
@@ -327,7 +342,7 @@ void displaymenu(int current_position, int menu_size)
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print(Generated_menu[current_position].MenuName + " ");
-        Generated_menu[current_position].Adjustable_Variable = current_mode_selection_value;
+        *Generated_menu[current_position].Adjustable_Variable = current_mode_selection_value;
         current_menu_value = Generated_menu[current_position].menu_value;
 
       if (Generated_menu[current_menu_value].max_range == 2){
@@ -337,7 +352,7 @@ void displaymenu(int current_position, int menu_size)
           lcd.print("OFF");
           }
       } else {
-        lcd.print(Generated_menu[current_position].Adjustable_Variable);
+        lcd.print(*Generated_menu[current_position].Adjustable_Variable);
       }
       //Serial.println(current_mode_selection_value);
     }
@@ -386,21 +401,21 @@ void SelectMenu(String Selected_Menu)
     Serial.print("Could Not Find menu");
     return;
 }
-/*
-boolean button_pressed(int button_name_pin) {
-  static int prev_millis = 0;
-  static int prev_state = 0;
-  int pushed = 0;
-  int current_millis = millis();
-  // Serial.println("Millis past prev state: " + String(current_millis-prev_millis));
-  if (current_millis >= prev_millis + 50 && digitalRead(button_name_pin) != prev_state){
-    pushed = digitalRead(button_name_pin);
-    prev_millis = current_millis;
-  }
-  prev_state = pushed;
-  return pushed;
+
+void updatehomescreen() {
+        //print new values
+        lcd.setCursor(0, 0);
+        lcd.print(String(int(floor(Speed))));
+        lcd.setCursor(0, 1);
+        lcd.print(String(rpm_engine));
+        lcd.setCursor(9, 0);
+        lcd.print(String(Temp));
+        lcd.setCursor(10, 1);
+        lcd.print(String(speed_mode));
+        lcd.setCursor(14, 1);
+        lcd.print(String(aceleration_mode));
 }
-*/
+
 void setup()
 {
     lcd.begin(16, 2);    // set up number of columns and rows
@@ -439,7 +454,7 @@ void setup()
     //  - No speed offset
     speed_offset = 0;
     max_speed_carb_offset = 0;
-    speed_mode = speedmodes[3];
+    speed_mode = 3; //array starts at 0 not 1 so 2 = 3
     aceleration_mode = 3;
     // button.setDebounceTime(50);
     pinMode(encoderPin1, INPUT);
@@ -451,6 +466,7 @@ void setup()
     current_mode_selection_value = 1;
 
     Enc_Btn.setDebounceTime(50);
+    //Serial.print(speed_mode);
 }
 
 void loop()
@@ -460,6 +476,10 @@ void loop()
     Encoder_Btn_already_pressed = 0;
     //Serial.println(Enc_btn_count);
     //Serial.println("current: " + String(Enc_btn_count));
+    if (Generated_menu[current_menu_value].menu_type == "Home Screen") {
+      updatehomescreen();
+    }
+
 
     if (Encoder_Btn_pressed == HIGH && Generated_menu[current_menu_value].menu_type == "Home Screen" && Encoder_Btn_already_pressed == 0)
     {
@@ -502,6 +522,7 @@ void loop()
 
     if (Generated_menu[current_menu_value].menu_type == "Adjustable Variable" && pos != pos_old)
     {
+      current_mode_selection_value = *Generated_menu[current_menu_value].Adjustable_Variable;
         if (pos > pos_old)
         {
             if (current_mode_selection_value < Generated_menu[current_menu_value].max_range)
@@ -517,20 +538,14 @@ void loop()
             }
         }
         SelectMenu(Generated_menu[current_menu_value].MenuName);
+        Serial.println(aceleration_mode);
     }
 
     if (Generated_menu[current_menu_value].menu_type == "Adjustable Variable" && Encoder_Btn_pressed == HIGH && Encoder_Btn_already_pressed == 0) {
     
         SelectMenu(Generated_menu[Generated_menu[current_menu_value].menu_before].MenuName);
     }
-
-    // Serial.println(digitalRead(Encoder_button));
     /*
-    else if (buttonpressed_encoder == HIGH && Generated_menu[current_menu_value].menu_type == "Adjustable Variable")
-    {
-
-    }
-/*
     //Top Speed and acceleration code below this
     // rpm sensor
     if (revolutions_wheel >= 20)
